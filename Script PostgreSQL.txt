@@ -1,0 +1,109 @@
+##Creación de tablas y cargue de datos de Excel a Postgressql##
+
+-- Table: public.Base Datos
+
+-- DROP TABLE IF EXISTS public."Base Datos";
+
+CREATE TABLE IF NOT EXISTS public."Base Datos"
+(
+    "Fecha" date,
+    "Factura" bigint,
+    "Pais" character varying COLLATE pg_catalog."default",
+    "Region" character varying COLLATE pg_catalog."default",
+    "IDVendedor" bigint,
+    "Modelo" character varying COLLATE pg_catalog."default",
+    "IDModelo" bigint,
+    "Marca" character varying COLLATE pg_catalog."default",
+    "Cantidad" bigint,
+    "Ingresos" numeric
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public."Base Datos"
+    OWNER to postgres;
+
+--command " "\\copy public.\"Precios\" (\"IDModelo\", \"Modelo\", \"Marca\", precio, \"PrecioPpto\") FROM 'C:/Users/J/Documents/CASODE~1/Final/Precios.csv' DELIMITER ';' CSV HEADER QUOTE '\"' ESCAPE '''';""
+
+-- Table: public.Precios
+
+-- DROP TABLE IF EXISTS public."Precios";
+
+CREATE TABLE IF NOT EXISTS public."Precios"
+(
+    "IDModelo" integer NOT NULL DEFAULT nextval('"Precios_IDModelo_seq"'::regclass),
+    "Modelo" character varying COLLATE pg_catalog."default",
+    "Marca" character varying COLLATE pg_catalog."default",
+    precio numeric,
+    "PrecioPpto" numeric,
+    CONSTRAINT "Precios_pK" PRIMARY KEY ("IDModelo")
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public."Precios"
+    OWNER to postgres;
+
+--command " "\\copy public.\"Base Datos\" (\"Fecha\", \"Factura\", \"Pais\", \"Region\", \"IDVendedor\", \"Modelo\", \"IDModelo\", \"Marca\", \"Cantidad\", \"Ingresos\") FROM 'C:/Users/J/Documents/CASODE~1/Final/BASEDA~1.CSV' DELIMITER ';' CSV HEADER ENCODING 'UTF8' QUOTE '\"' ESCAPE '''';""
+
+
+##Creación de llaves y conexión entre tablas Base Datos y Precios##
+
+ALTER TABLE IF EXISTS public."Base Datos"
+    ADD CONSTRAINT "BaseDatos_Precios_fk" FOREIGN KEY ("IDModelo")
+    REFERENCES public."Precios" ("IDModelo") MATCH SIMPLE
+    ON UPDATE CASCADE
+    ON DELETE NO ACTION
+    NOT VALID;
+
+#Creación de consulta que traiga de la base de datos todas las Toyota de Colombia para el primer trimestre de cada año.##
+
+SELECT * 
+FROM public."Base Datos"
+WHERE "Marca" = 'TOYOTA' AND DATE_PART('QUARTER', "Fecha") = 1 AND "Pais" = 'Colombia'
+ORDER BY "Fecha"
+;
+
+#Creación de consulta que calcula cuantos carros se vendieron de mayo a agosto de cada año que tenga un precio menor a 15.000
+
+SELECT COUNT(*)
+FROM public."Base Datos" AS BD INNER JOIN public."Precios" as P ON BD."IDModelo" = P."IDModelo"
+WHERE P."precio" < 15000 AND DATE_PART('MONTH', BD."Fecha") IN (5,6,7,8)
+;
+
+
+
+##Creación de llaves y conexión entre tablas Base Datos y Vendedores##
+
+ALTER TABLE IF EXISTS public."Base Datos"
+    ADD CONSTRAINT "BaseDatos_Vendedores_fk" FOREIGN KEY ("IDVendedor")
+    REFERENCES public."Vendedores" ("IDVendedor") MATCH SIMPLE
+    ON UPDATE CASCADE
+    ON DELETE NO ACTION
+    NOT VALID;
+
+#Creación consulta que diga el top 3 de vendedores por cada mes.##
+
+
+WITH ventas_mes_rank AS (
+    SELECT
+        EXTRACT(MONTH FROM BD."Fecha") AS mes,
+        BD."IDVendedor",
+		"Vendedor",
+        COUNT(*) AS cantidad_ventas,
+        ROW_NUMBER() OVER(PARTITION BY EXTRACT(MONTH FROM BD."Fecha") ORDER BY COUNT(*) DESC) AS ranking
+    FROM public."Base Datos" AS BD INNER JOIN public."Vendedores" AS V ON BD."IDVendedor" = V."IDVendedor"
+    GROUP BY EXTRACT(MONTH FROM BD."Fecha"), BD."IDVendedor","Vendedor"
+)
+
+SELECT
+    mes,
+    "IDVendedor",
+	"Vendedor",
+    cantidad_ventas
+FROM ventas_mes_rank
+WHERE ranking <= 3
+ORDER BY mes, cantidad_ventas DESC
+;
+
+
